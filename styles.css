@@ -1,0 +1,47 @@
+body {
+    font-family: Georgia, 'Times New Roman', Times, serif;
+    background-color: rgb(4, 4, 49);
+    color: aliceblue;
+}
+
+a {
+    color: rgb(136, 215, 189);
+    background-color: gray;
+}
+
+h1,
+h2 {
+    text-align: center;
+}
+
+img {
+    border: 5px solid orange;
+    padding: 5px;
+    height: 300px;
+    /* margin: auto;
+    display: block; */
+}
+
+.rizz {
+    font-family: 'Times New Roman', Times, serif;
+    color: brown;
+    border: 5px dashed yellow;
+    font-size: xx-large;
+    font-weight: bolder;
+    background-color: aqua;
+}
+
+.rizz:hover {
+    font-size: 450%;
+    color: red;
+    border: 5px solid cyan;
+}
+
+li {
+    width: fit-content
+}
+
+li:hover {
+    text-decoration: underline;
+    background-color: azure;
+}

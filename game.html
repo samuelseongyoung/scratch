@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <div>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Click the Target! (Dynamic)</title> <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        /* Apply arcade font */
+        body, button {
+            font-family: 'Press Start 2P', cursive;
+        }
+        /* Ensure game area takes up significant space */
+        #gameArea {
+            width: 90%;
+            height: 70vh; /* Viewport height */
+            max-width: 800px; /* Max width */
+            max-height: 500px; /* Max height */
+            position: relative; /* Needed for absolute positioning of items */
+            overflow: hidden; /* Prevent items going outside */
+            cursor: crosshair; /* Indicate clickable area */
+            border-radius: 15px; /* Rounded corners */
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3); /* Nice shadow */
+            background: linear-gradient(135deg, #87CEEB, #4682B4); /* Sky blue gradient */
+        }
+        /* Style for the target and trash can */
+        .clickable {
+            position: absolute;
+            font-size: 2.5rem; /* Slightly smaller for potentially more items */
+            cursor: pointer;
+            user-select: none; /* Prevent text selection */
+            transition: transform 0.1s ease-out; /* Quick feedback */
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3); /* Add depth */
+            /* Animation for appearing/disappearing */
+            animation: fadeInOut 2s ease-in-out forwards;
+        }
+        .clickable:active {
+            transform: scale(0.9); /* Shrink slightly on click */
+        }
+
+        /* Fade in/out animation */
+        @keyframes fadeInOut {
+            0% { opacity: 0; transform: scale(0.5); }
+            15% { opacity: 1; transform: scale(1.05); } /* Fade in and slightly overshoot */
+            85% { opacity: 1; transform: scale(1); }   /* Stay visible */
+            100% { opacity: 0; transform: scale(0.5); } /* Fade out */
+        }
+
+        /* Message box styling */
+        #messageBox {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.75);
+            color: white;
+            padding: 30px 40px;
+            border-radius: 15px;
+            font-size: 1.5em;
+            text-align: center;
+            display: flex; /* Use flex for layout */
+            flex-direction: column; /* Stack items vertically */
+            align-items: center; /* Center items */
+            z-index: 10;
+            border: 3px solid #fff;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+        }
+         #messageBox button {
+            font-size: 0.7em;
+            padding: 12px 25px;
+            margin-top: 25px;
+            cursor: pointer;
+            background-color: #48bb78; /* Green button */
+            color: white;
+            border: none;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+            transition: background-color 0.3s ease;
+        }
+         #messageBox button:hover {
+             background-color: #38a169; /* Darker green on hover */
+         }
+    </style>
+</head>
+<body class="bg-gray-800 flex flex-col justify-center items-center min-h-screen text-white p-4">
+
+    <h1 class="text-3xl mb-6 text-center">Click the Target!</h1>
+
+    <div class="flex justify-around w-full max-w-md mb-6 text-2xl">
+        <div>Score: <span id="score">0</span></div>
+        <div>Time: <span id="timer">30</span>s</div>
+    </div>
+
+    <div id="gameArea" class="border-4 border-gray-500 bg-blue-300">
+        <div id="messageBox">
+            <p id="messageText">Click Start!</p>
+            <button id="startButton" class="bg-green-500 hover:bg-green-700 text-white font-bold py-3 px-6 rounded-lg shadow-md">
+                Start Game
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // --- DOM Elements ---
+        const gameArea = document.getElementById('gameArea');
+        const scoreElement = document.getElementById('score');
+        const timerElement = document.getElementById('timer');
+        const messageBox = document.getElementById('messageBox');
+        const messageText = document.getElementById('messageText');
+        const startButton = document.getElementById('startButton');
+
+        // --- Game Config ---
+        const GAME_DURATION = 30; // seconds
+        const TARGET_SPAWN_INTERVAL = 800; // milliseconds
+        const TRASH_SPAWN_INTERVAL = 1200; // milliseconds
+        const ITEM_LIFESPAN = 2000; // milliseconds (how long items stay on screen)
+        const MAX_TARGETS = 8; // Max targets on screen at once
+        const MAX_TRASH = 5; // Max trash cans on screen at once
+
+        // --- Game Variables ---
+        let score = 0;
+        let timeLeft = GAME_DURATION;
+        let gameTimerInterval = null;
+        let targetSpawnInterval = null;
+        let trashSpawnInterval = null;
+        let gameRunning = false;
+        let activeItems = new Map(); // Store active items (element -> timeoutId)
+
+        // --- Event Listeners ---
+        startButton.addEventListener('click', startGame);
+        // Use event delegation for clicks within the game area
+        gameArea.addEventListener('click', handleItemClick);
+
+        // --- Game Functions ---
+
+        /**
+         * Starts or restarts the game.
+         */
+        function startGame() {
+            score = 0;
+            timeLeft = GAME_DURATION;
+            gameRunning = true;
+            scoreElement.textContent = score;
+            timerElement.textContent = timeLeft;
+            messageBox.style.display = 'none';
+
+            // Clear any existing items and timers
+            clearAllTimers();
+            clearAllItems();
+
+            // Start game timers
+            gameTimerInterval = setInterval(updateGameTimer, 1000);
+            targetSpawnInterval = setInterval(trySpawnTarget, TARGET_SPAWN_INTERVAL);
+            trashSpawnInterval = setInterval(trySpawnTrash, TRASH_SPAWN_INTERVAL);
+        }
+
+        /**
+         * Handles clicks within the game area using event delegation.
+         * @param {MouseEvent} event - The click event object.
+         */
+        function handleItemClick(event) {
+            if (!gameRunning) return;
+
+            const clickedElement = event.target;
+
+            // Check if the clicked element is one of our active items
+            if (activeItems.has(clickedElement)) {
+                // Clear the disappearance timer for this item
+                clearTimeout(activeItems.get(clickedElement));
+
+                if (clickedElement.classList.contains('target')) {
+                    score++;
+                    scoreElement.textContent = score;
+                } else if (clickedElement.classList.contains('trash')) {
+                    score--;
+                    scoreElement.textContent = score;
+                }
+
+                // Remove the clicked item immediately
+                removeItem(clickedElement);
+            }
+        }
+
+        /**
+         * Creates and adds a target element to the game area.
+         */
+        function spawnTarget() {
+            const target = document.createElement('div');
+            target.textContent = '🎯';
+            target.classList.add('clickable', 'target'); // Add 'target' class
+
+            // Set random position
+            setPosition(target);
+
+            // Add to game area
+            gameArea.appendChild(target);
+
+            // Set timer to remove the target after its lifespan
+            const timeoutId = setTimeout(() => {
+                removeItem(target);
+            }, ITEM_LIFESPAN);
+
+            // Store the item and its removal timer
+            activeItems.set(target, timeoutId);
+        }
+
+         /**
+         * Creates and adds a trash element to the game area.
+         */
+        function spawnTrash() {
+            const trash = document.createElement('div');
+            trash.textContent = '🗑️';
+            trash.classList.add('clickable', 'trash'); // Add 'trash' class
+
+            // Set random position
+            setPosition(trash);
+
+            // Add to game area
+            gameArea.appendChild(trash);
+
+            // Set timer to remove the trash after its lifespan
+            const timeoutId = setTimeout(() => {
+                removeItem(trash);
+            }, ITEM_LIFESPAN);
+
+             // Store the item and its removal timer
+            activeItems.set(trash, timeoutId);
+        }
+
+        /**
+         * Attempts to spawn a target if the max limit isn't reached.
+         */
+        function trySpawnTarget() {
+            if (!gameRunning) return;
+            let currentTargetCount = 0;
+            activeItems.forEach((_, item) => {
+                if (item.classList.contains('target')) currentTargetCount++;
+            });
+
+            if (currentTargetCount < MAX_TARGETS) {
+                spawnTarget();
+            }
+        }
+
+        /**
+         * Attempts to spawn trash if the max limit isn't reached.
+         */
+        function trySpawnTrash() {
+             if (!gameRunning) return;
+             let currentTrashCount = 0;
+             activeItems.forEach((_, item) => {
+                 if (item.classList.contains('trash')) currentTrashCount++;
+             });
+
+             if (currentTrashCount < MAX_TRASH) {
+                 spawnTrash();
+             }
+        }
+
+
+        /**
+         * Sets a random position for an item within the game area.
+         * @param {HTMLElement} item - The element to position.
+         */
+        function setPosition(item) {
+            // Ensure item dimensions are available (wait for next frame if needed, simple approach here)
+             requestAnimationFrame(() => {
+                const gameAreaRect = gameArea.getBoundingClientRect();
+                // Use computed style for potentially more accurate dimensions after render
+                const itemStyle = window.getComputedStyle(item);
+                const itemHeight = parseFloat(itemStyle.height);
+                const itemWidth = parseFloat(itemStyle.width);
+
+                const maxTop = gameAreaRect.height - itemHeight;
+                const maxLeft = gameAreaRect.width - itemWidth;
+
+                const randomTop = Math.max(0, Math.random() * maxTop);
+                const randomLeft = Math.max(0, Math.random() * maxLeft);
+
+                item.style.top = `${randomTop}px`;
+                item.style.left = `${randomLeft}px`;
+            });
+        }
+
+        /**
+         * Removes an item element from the game area and the active items map.
+         * @param {HTMLElement} item - The element to remove.
+         */
+        function removeItem(item) {
+            if (item && item.parentNode === gameArea) {
+                gameArea.removeChild(item);
+            }
+            activeItems.delete(item); // Remove from our tracking map
+        }
+
+
+        /**
+         * Updates the main game timer.
+         */
+        function updateGameTimer() {
+            timeLeft--;
+            timerElement.textContent = timeLeft;
+
+            if (timeLeft <= 0) {
+                endGame();
+            }
+        }
+
+        /**
+         * Ends the game session.
+         */
+        function endGame() {
+            gameRunning = false;
+            clearAllTimers();
+            clearAllItems();
+
+            // Show final message
+            messageText.innerHTML = `Game Over!<br>Final Score: ${score}`;
+            startButton.textContent = 'Restart Game';
+            messageBox.style.display = 'flex';
+        }
+
+        /**
+         * Clears all active game intervals (spawn timers, game timer).
+         */
+        function clearAllTimers() {
+            clearInterval(gameTimerInterval);
+            clearInterval(targetSpawnInterval);
+            clearInterval(trashSpawnInterval);
+            gameTimerInterval = null;
+            targetSpawnInterval = null;
+            trashSpawnInterval = null;
+            // Also clear any pending removal timeouts stored in activeItems
+            activeItems.forEach(timeoutId => clearTimeout(timeoutId));
+        }
+
+        /**
+         * Removes all item elements from the game area and clears the tracking map.
+         */
+        function clearAllItems() {
+             activeItems.forEach((_, item) => {
+                 if (item && item.parentNode === gameArea) {
+                     gameArea.removeChild(item);
+                 }
+             });
+             activeItems.clear(); // Clear the map
+        }
+
+
+        // --- Initial Setup ---
+        messageBox.style.display = 'flex'; // Show start message initially
+
+    </script>
+
+</body>
+</html>
